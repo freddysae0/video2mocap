@@ -66,7 +66,12 @@ SOMA_BVH = GEMX / "third_party/soma-retargeter/soma_retargeter/configs/soma/soma
 
 
 # ----------------------------------------------------------------------------------------- tracking
-def track_all(video: str, min_frames: int, max_people: int) -> tuple[dict[int, dict], int, int, int, float]:
+def track_all(video: str, min_frames: int, max_people: int, cache: Path | None = None
+              ) -> tuple[dict[int, dict], int, int, int, float]:
+    """Detect + track every person. Raw per-frame detections are checkpointed to `cache` every 50
+    frames, so a GPU failure (e.g. another app grabbing the GPU) resumes instead of starting over.
+    Detections are cached (not tracker state): on resume, tracking is replayed from frame 0, which
+    is cheap and gives exactly the same tracks."""
     import cv2
 
     from gem.utils.video_io_utils import read_video_np
@@ -76,15 +81,24 @@ def track_all(video: str, min_frames: int, max_people: int) -> tuple[dict[int, d
     frames = read_video_np(video)
     T, H, W, _ = frames.shape
     fps = cv2.VideoCapture(video).get(cv2.CAP_PROP_FPS) or 30.0
-    det = YOLOXDetector()
+    dets: list = []
+    if cache is not None and cache.exists():
+        dets = list(np.load(cache, allow_pickle=True)["dets"])
+        print(f"[v2m] resuming detection at frame {len(dets)}/{T}")
+    det = YOLOXDetector() if len(dets) < T else None
+    for i in tqdm(range(len(dets), T), desc="[v2m] detect all", initial=len(dets), total=T):
+        boxes, scores = det.detect(frames[i][..., ::-1].copy())
+        dets.append((np.asarray(boxes, np.float32), np.asarray(scores, np.float32)))
+        if cache is not None and (len(dets) % 50 == 0 or len(dets) == T):
+            np.savez(cache, dets=np.array(dets, dtype=object))
+    del frames, det
+    _free_gpu()
+
     tracker = ByteTracker()
     seen: dict[int, dict[int, np.ndarray]] = defaultdict(dict)
-    for i in tqdm(range(T), desc="[v2m] detect+track all"):
-        boxes, scores = det.detect(frames[i][..., ::-1].copy())
+    for i, (boxes, scores) in enumerate(tqdm(dets, desc="[v2m] track all")):
         for box, tid, _score in tracker.update(boxes, scores):
             seen[int(tid)][i] = np.asarray(box, dtype=np.float32)
-    del frames, det, tracker
-    _free_gpu()
 
     seen = stitch_tracks(seen, max_gap=int(round(3 * fps)))
     tracks = {}
@@ -256,7 +270,7 @@ def main() -> None:
         import cv2
 
         fps0 = cv2.VideoCapture(video).get(cv2.CAP_PROP_FPS) or 30.0
-        tracks, T, W, H, fps = track_all(video, int(a.min_seconds * fps0), a.max_people)
+        tracks, T, W, H, fps = track_all(video, int(a.min_seconds * fps0), a.max_people, out / "detections.npz")
         np.savez(tracks_file, tracks=np.array(tracks, dtype=object), info=np.array([T, W, H, fps]))
     print(f"[v2m] {len(tracks)} people: " + ", ".join(f"id{k} f{v['start']}-{v['end']}" for k, v in tracks.items()))
 

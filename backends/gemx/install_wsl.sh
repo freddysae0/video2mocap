@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Installs the NVIDIA GEM-X backend inside WSL2/Linux, user-space only (no sudo, no compiler).
+# GEM-X: Apache-2.0 code, NVIDIA Open Model License weights (commercial use allowed).
+# We use GEM-X's ONNX pipeline (demo_soma_onnx.py), which does not need detectron2,
+# so no C++/CUDA toolchain is required.
+#
+# Usage:  bash backends/gemx/install_wsl.sh [install_dir]   (default: ~/v2m/GEM-X)
+set -euo pipefail
+
+INSTALL_DIR="${1:-$HOME/v2m/GEM-X}"
+GEMX_REF="${GEMX_REF:-main}"
+BIN="$HOME/.local/bin"
+mkdir -p "$BIN"
+export PATH="$BIN:$PATH"
+
+need() { command -v "$1" >/dev/null 2>&1; }
+
+# GEM-X declares one submodule with an SSH url; force HTTPS for this process only (no global config
+# change) and never block on an interactive prompt.
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.https://github.com/.insteadOf" GIT_CONFIG_VALUE_0="git@github.com:"
+export GIT_TERMINAL_PROMPT=0
+
+if ! need uv; then
+  echo "[v2m] installing uv"
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+fi
+
+if ! need git-lfs; then
+  echo "[v2m] installing git-lfs (static binary)"
+  tmp="$(mktemp -d)"
+  ver="3.5.1"
+  curl -LsSf "https://github.com/git-lfs/git-lfs/releases/download/v${ver}/git-lfs-linux-amd64-v${ver}.tar.gz" -o "$tmp/lfs.tgz"
+  tar -xzf "$tmp/lfs.tgz" -C "$tmp"
+  cp "$tmp"/git-lfs-*/git-lfs "$BIN/"
+  git lfs install --skip-repo
+fi
+
+if ! need ffmpeg; then
+  echo "[v2m] installing ffmpeg (static build)"
+  tmp="$(mktemp -d)"
+  curl -LsSf "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz" -o "$tmp/ff.tar.xz"
+  tar -xJf "$tmp/ff.tar.xz" -C "$tmp"
+  cp "$tmp"/ffmpeg-*-static/ffmpeg "$tmp"/ffmpeg-*-static/ffprobe "$BIN/"
+fi
+
+mkdir -p "$(dirname "$INSTALL_DIR")"
+if [ ! -d "$INSTALL_DIR/.git" ]; then
+  git clone --recursive https://github.com/NVlabs/GEM-X.git "$INSTALL_DIR"
+fi
+cd "$INSTALL_DIR"
+git fetch --all -q && git checkout -q "$GEMX_REF" && git submodule update --init --recursive
+git rev-parse HEAD > .v2m_commit
+
+echo "[v2m] python env"
+[ -d .venv ] || uv venv .venv --python 3.12
+# shellcheck disable=SC1091
+source .venv/bin/activate
+uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+uv pip install -e third_party/soma
+(cd third_party/soma && git lfs pull)
+uv pip install -e .
+uv pip install cloudpickle fvcore iopath pycocotools braceexpand roma 'setuptools<75'
+uv pip install onnxruntime-gpu
+
+python - <<'EOF'
+import torch, onnxruntime as ort
+print("[v2m] torch", torch.__version__, "cuda", torch.cuda.is_available(),
+      torch.cuda.get_device_name(0) if torch.cuda.is_available() else "")
+print("[v2m] onnxruntime providers", ort.get_available_providers())
+EOF
+echo "[v2m] GEM-X installed at $INSTALL_DIR (commit $(cat .v2m_commit))"

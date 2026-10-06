@@ -1,6 +1,6 @@
 """v2m command line.
 
-  v2m run      VIDEO --out DIR [--static-cam] [--max-people N]   full pipeline (backend + post + review)
+  v2m run      VIDEO --out DIR [--fast] [--fbx] [--max-people N] full pipeline (backend + post + review)
   v2m post     RAW.npz --rig NAME --out CLEAN.npz                post-process one motion
   v2m review   MOTION.npz --out SHEET.png [--track-dir DIR]      key-frame contact sheet for review
   v2m edit     MOTION.npz EDITS.json --out EDITED.npz            apply reviewer edits (then re-run post)
@@ -77,7 +77,9 @@ def cmd_metrics(a) -> None:
 def cmd_run(a) -> None:
     from .run import run_video
 
-    run_video(a.video, a.out, static_cam=a.static_cam, max_people=a.max_people, backend=a.backend)
+    extra = ["--no_imgfeat"] if a.fast else []
+    run_video(a.video, a.out, static_cam=not a.moving_cam, max_people=a.max_people, backend=a.backend,
+              extra=extra, fbx=a.fbx)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -87,7 +89,10 @@ def main(argv: list[str] | None = None) -> None:
     s = sub.add_parser("run")
     s.add_argument("video")
     s.add_argument("--out", required=True)
-    s.add_argument("--static-cam", action="store_true")
+    s.add_argument("--moving-cam", action="store_true",
+                   help="camera moves (needs visual odometry; not supported yet - static is assumed)")
+    s.add_argument("--fbx", action="store_true", help="also export FBX through Blender")
+    s.add_argument("--fast", action="store_true", help="GEM-X keypoints-only mode: less memory, lower quality")
     s.add_argument("--max-people", type=int, default=8)
     s.add_argument("--backend", default="gemx")
     s.set_defaults(fn=cmd_run)

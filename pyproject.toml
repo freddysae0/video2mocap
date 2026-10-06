@@ -13,6 +13,7 @@ dependencies = ["numpy>=1.23", "scipy>=1.10", "matplotlib>=3.7"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+video = ["imageio>=2.34", "av>=12"]
 
 [project.scripts]
 v2m = "video2mocap.cli:main"

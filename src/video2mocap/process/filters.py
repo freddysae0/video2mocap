@@ -39,7 +39,7 @@ class SmoothingConfig:
     extremity_cutoff_hz: float = 10.0  # hands/feet move fast; keep their detail
     # joints whose name contains one of these tokens use extremity_cutoff_hz
     extremity_tokens: tuple[str, ...] = ("hand", "wrist", "finger", "thumb", "index", "middle", "ring",
-                                         "pinky", "foot", "ankle", "toe", "head")
+                                         "pinky", "foot", "ankle", "toe", "head", "jaw", "eye")
     # optional per-joint override, name -> cutoff (0 disables filtering for that joint)
     overrides: dict[str, float] | None = None
 

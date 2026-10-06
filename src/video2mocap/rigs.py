@@ -49,4 +49,12 @@ TEST_HUMANOID_PROFILE = RigProfile(
           Leg("RightUpLeg", "RightLeg", "RightFoot", "RightToeBase")],
 )
 
-PROFILES: dict[str, RigProfile] = {TEST_HUMANOID_PROFILE.name: TEST_HUMANOID_PROFILE}
+# NVIDIA SOMA (GEM-X), 77 joints after dropping the dummy "Root". Beware the naming: in SOMA
+# "LeftLeg" is the THIGH and "LeftShin" the knee/lower leg (Mixamo uses LeftUpLeg/LeftLeg).
+SOMA77_PROFILE = RigProfile(
+    "soma77",
+    legs=[Leg("LeftLeg", "LeftShin", "LeftFoot", "LeftToeBase"),
+          Leg("RightLeg", "RightShin", "RightFoot", "RightToeBase")],
+)
+
+PROFILES: dict[str, RigProfile] = {p.name: p for p in (TEST_HUMANOID_PROFILE, SOMA77_PROFILE)}

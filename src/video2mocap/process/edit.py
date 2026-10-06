@@ -47,7 +47,10 @@ def apply_edits(motion: Motion, edits: list[dict]) -> Motion:
         w = _weights(T, fr[0], fr[1], int(ed.get("falloff", 0)))
         if op == "rotate":
             j = out.skeleton.index(ed["joint"])
-            delta = quat.from_euler(np.array(ed["euler_deg"], dtype=float), ed.get("order", "XYZ"))
+            if "quat" in ed:  # (w, x, y, z), e.g. written by the web editor's rotation gizmo
+                delta = quat.normalize(np.asarray(ed["quat"], dtype=float))
+            else:
+                delta = quat.from_euler(np.array(ed["euler_deg"], dtype=float), ed.get("order", "XYZ"))
             dq = quat.slerp(quat.identity((T,)), np.broadcast_to(delta, (T, 4)), w)
             if ed.get("space", "local") == "local":
                 out.local_rot[:, j] = quat.normalize(quat.mul(out.local_rot[:, j], dq))

@@ -103,6 +103,12 @@ The viewer shows the source video with a coloured stick figure on every person a
 play/pause, ←/→ = frame by frame, `1×/0.5×/0.25×` = speed; drag to orbit the 3D view. Feet in
 contact with the ground light up green.
 
+**Keyframe editor** (same page): go to a frame, click a joint in the 3D view and rotate it with the
+gizmo (`R`); the hips can also be moved (`T`). Each change becomes a keyframe that eases in/out over
+"Transición" frames, previewed live in 3D *and* over the video. Keyframes are listed (click to jump,
+✕ to delete) and marked on the timeline; `Ctrl+Z` undoes. **Guardar** writes, per person,
+`edits.json` (the same edit format as `v2m edit`) plus `edited.npz` and `edited.bvh`.
+
 ### 4. Fix and export
 ```bash
 v2m edit   runs/my_clip/track_00/clean.npz edits.json --out fixed.npz   # see docs/REVIEW_LOOP.md

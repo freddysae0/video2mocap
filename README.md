@@ -8,8 +8,8 @@ Built first for **cinematics**: scenes with one or several characters interactin
 goodbye, carrying someone, a conversation), recorded with a phone and turned into animation that
 keeps the timing and intent of the performance.
 
-> Status: **early (v0.1)**. The post-processing core, BVH/FBX export and the review/edit loop are
-> implemented and tested. The first estimator backend (NVIDIA GEM-X) is being integrated.
+> Status: **early (v0.2)**. Video → per-person animation works end to end with NVIDIA GEM-X,
+> with post-processing, review sheets, a web viewer and BVH/FBX export. Fingers and faces are next.
 
 ## Why another one?
 
@@ -63,21 +63,61 @@ See [docs/RESEARCH.md](docs/RESEARCH.md) for the full survey (2024–2026) and w
 
 ## Quick start
 
+### 1. Install
 ```bash
-# core (Windows / Linux / macOS)
-uv venv && uv pip install -e ".[dev]"
+# core (Windows / Linux / macOS), Python 3.10+
+uv venv && uv pip install -e ".[dev,video]"
 pytest
 
-# post-process, review, edit, export a motion
-v2m post   raw.npz --rig soma77 --out clean.npz
-v2m review clean.npz --out sheet.png
-v2m edit   clean.npz edits.json --out fixed.npz
-v2m export fixed.npz --bvh fixed.bvh --fbx fixed.fbx     # FBX through headless Blender
-
-# GEM-X backend (Linux or WSL2 with an NVIDIA GPU)
-bash backends/gemx/install_wsl.sh
-v2m run video.mp4 --out runs/clip01
+# GEM-X backend (Linux, or WSL2 on Windows, NVIDIA GPU with 8 GB+). No sudo needed.
+bash backends/gemx/install_wsl.sh          # inside WSL / Linux
 ```
+Blender (for FBX export) is auto-detected, or set `BLENDER=/path/to/blender`.
+
+### 2. Video → animation
+```bash
+v2m run my_clip.mp4 --out runs/my_clip --fbx
+```
+- Every person in the video is detected, tracked and solved separately, then placed in one shared
+  world (static camera).
+- `--fast` skips the SAM-3D-Body image features: much less GPU/RAM, lower quality.
+- `--max-people N` limits how many people are solved (largest/longest first).
+
+Output (`runs/my_clip/`):
+```
+run.json, summary.json           what was found, metrics per person
+track_00/  track_01/ ...         one folder per person
+  clean.npz                      clean motion (v2m format)
+  clean.bvh / clean.fbx          for Blender / Unreal
+  metrics.json                   raw vs final: foot skate, jitter, ground penetration, reprojection px
+  review.png                     key-frame review sheet (video + projected skeleton, front/side views)
+  clip.mp4, motion_raw.npz       the person's clip and the raw estimator output
+```
+
+### 3. Look at it
+```bash
+v2m view runs/my_clip        # opens http://127.0.0.1:8765
+```
+The viewer shows the source video with a coloured stick figure on every person and, next to it, the
+3D animation of everyone in the same world, in sync. Click a person's chip to hide/show it; space =
+play/pause, ←/→ = frame by frame, `1×/0.5×/0.25×` = speed; drag to orbit the 3D view. Feet in
+contact with the ground light up green.
+
+### 4. Fix and export
+```bash
+v2m edit   runs/my_clip/track_00/clean.npz edits.json --out fixed.npz   # see docs/REVIEW_LOOP.md
+v2m export fixed.npz --bvh fixed.bvh --fbx fixed.fbx
+```
+
+### Tips for recording
+- Tripod or a still phone (moving cameras are not supported yet).
+- Whole bodies in frame, **feet visible**, good light; people crossing in front of each other is
+  the hardest case.
+- For faces and fingers, get closer (see [docs/ROADMAP.md](docs/ROADMAP.md)).
+
+### Hardware notes
+Tested on an RTX 3050 (8 GB) + 16 GB RAM through WSL2: ~5 min per 10 s of video per person, peaks
+close to the RAM limit, so close heavy apps while it runs.
 
 ## Metrics
 

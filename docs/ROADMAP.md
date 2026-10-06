@@ -23,7 +23,7 @@ characters — faithful to the video and editable.
   - review sheets with hand close-ups; edits can target fingers like any joint
 - Recommended capture for hero shots: a second, closer camera on the hands (multi-view later)
 
-## v0.4 — face
+## v0.4 — face (in progress: capture, sync, attach and viewer panel done; Unreal curve import and LLM fill-in next)
 Two paths:
 1. **MetaHuman Animator (mono video, Unreal 5.6+)** — best quality on MetaHuman faces. v2m exports,
    per person, a **stabilised, cropped face video** (from the head track) at the best available
@@ -32,6 +32,12 @@ Two paths:
    the same face crops, filtered, exported as animation curves (CSV/JSON + FBX curves) that drive a
    MetaHuman through the ARKit mapping pose asset. Fast, fully automatic, editable like any curve.
 - Gaze and head: eye/head rotation from the face track blended with the body's neck/head.
+- **Separate face take** merged with the body (clap / audio sync, manual offset + time scale).
+- **LLM fill-in** where the face is occluded or too small: a vision-language model reads key frames and
+  scene context and writes *intent keyframes* (emotion, intensity, eyes, timing), converted to curves
+  through an expression library with procedural blinks/breathing; every segment tagged
+  `measured` / `generated`. The model also reviews measured curves against the video.
+- Lip-sync from dialogue audio as a third source.
 - Face review sheets: crop + detected landmarks + resulting curve values at key frames; edits on
   curves (`set_curve`, `scale_curve`) with falloff.
 

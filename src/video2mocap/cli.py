@@ -6,6 +6,7 @@
   v2m edit     MOTION.npz EDITS.json --out EDITED.npz            apply reviewer edits (then re-run post)
   v2m export   MOTION.npz --bvh OUT.bvh [--fbx OUT.fbx]          BVH (and FBX through Blender)
   v2m view     RUN_DIR                                         web viewer: video + one stick figure per person + 3D
+  v2m face     capture | from-body | sync | attach             face curves (ARKit-52) and merging with a body
   v2m metrics  MOTION.npz                                        quality numbers as JSON
 """
 from __future__ import annotations
@@ -77,6 +78,39 @@ def cmd_view(a) -> None:
     serve(a.run_dir, port=a.port, open_browser=not a.no_browser)
 
 
+def cmd_face(a) -> None:
+    from .face.attach import attach_face
+    from .face.capture import FaceTake, capture_face, capture_face_from_track
+
+    if a.face_cmd == "capture":
+        take = capture_face(a.video)
+        take.save(a.out)
+        print(json.dumps({"take": a.out, "frames": take.num_frames, **take.meta}, indent=2))
+    elif a.face_cmd == "from-body":
+        take = capture_face_from_track(a.run_dir, a.person)
+        out = Path(a.run_dir) / f"face_take_person{a.person}.npz"
+        take.save(out)
+        attach_face(a.run_dir, a.person, out, offset_s=0.0)
+        print(json.dumps({"take": str(out), **take.meta}, indent=2))
+    elif a.face_cmd == "sync":
+        from .face.sync import sync_offset
+
+        print(json.dumps(sync_offset(a.body_video, a.face_video, a.method), indent=2))
+    elif a.face_cmd == "attach":
+        offset = a.offset
+        if offset is None:
+            from .face.sync import sync_offset
+            from .viewer.export import _source_video
+
+            run = json.loads((Path(a.run_dir) / "run.json").read_text())
+            body_video = Path(a.run_dir) / _source_video(run, Path(a.run_dir))
+            take = FaceTake.load(a.take)
+            res = sync_offset(body_video, take.meta["source"], a.sync)
+            offset = res["offset_s"]
+            print(json.dumps(res, indent=2))
+        print(attach_face(a.run_dir, a.person, a.take, offset_s=offset, time_scale=a.time_scale))
+
+
 def cmd_metrics(a) -> None:
     print(json.dumps(report(Motion.load(a.motion)), indent=2))
 
@@ -135,6 +169,27 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--no-browser", action="store_true")
     s.set_defaults(fn=cmd_view)
+
+    s = sub.add_parser("face", help="face capture: curves from a face take, sync and attach to a person")
+    fs = s.add_subparsers(dest="face_cmd", required=True)
+    f = fs.add_parser("capture", help="face take video -> 52 ARKit curves + head rotation")
+    f.add_argument("video")
+    f.add_argument("--out", required=True)
+    f = fs.add_parser("from-body", help="face from the body video itself (head crops), attached to a person")
+    f.add_argument("run_dir")
+    f.add_argument("--person", type=int, required=True)
+    f = fs.add_parser("sync", help="offset between a body video and a face video (clap or audio)")
+    f.add_argument("body_video")
+    f.add_argument("face_video")
+    f.add_argument("--method", default="auto", choices=["auto", "clap", "audio"])
+    f = fs.add_parser("attach", help="merge a face take onto a person of a run")
+    f.add_argument("run_dir")
+    f.add_argument("--person", type=int, required=True)
+    f.add_argument("--take", required=True)
+    f.add_argument("--offset", type=float, help="seconds, t_face = t_body + offset (default: sync by audio)")
+    f.add_argument("--sync", default="auto", choices=["auto", "clap", "audio"])
+    f.add_argument("--time-scale", type=float, default=1.0)
+    s.set_defaults(fn=cmd_face)
 
     s = sub.add_parser("metrics")
     s.add_argument("motion")

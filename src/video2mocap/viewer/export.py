@@ -51,6 +51,11 @@ def build_viewer_data(run_dir: str | Path) -> Path:
         sw = clean.meta.get("shared_world", {"M": np.eye(3).tolist(), "b": [0, 0, 0]})
         sk = clean.skeleton
         edits_file = tdir / "edits.json"
+        face = None
+        if (tdir / "face.npz").exists():
+            fd = np.load(tdir / "face.npz")
+            face = {"names": [str(n) for n in fd["names"]], "curves": _r(fd["curves"], 3),
+                    "valid": fd["valid"].astype(int).tolist()}
         people.append({
             "id": i, "track": tr["dir"], "name": f"Persona {i + 1}", "color": COLORS[i % len(COLORS)],
             "frame_start": tr["start"], "frame_end": tr["end"],
@@ -61,6 +66,7 @@ def build_viewer_data(run_dir: str | Path) -> Path:
             # x_track = M^T (x - shift - b);  uv ~ K (R x_track + t)
             "cam": {"K": _r(cam.K.reshape(-1, 9), 3), "R": _r(cam.R.reshape(-1, 9), 6), "t": _r(cam.t, 5),
                     "M": sw["M"], "b": sw["b"], "shift": shift.tolist()},
+            "face": face,
             "edits": json.loads(edits_file.read_text()) if edits_file.exists() else [],
             "metrics": json.loads((tdir / "metrics.json").read_text())["final"] if (tdir / "metrics.json").exists() else {},
         })

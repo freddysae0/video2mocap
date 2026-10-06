@@ -61,6 +61,8 @@
       <button id="modeMove" title="T">Mover (cadera)</button>
       <label>Transición <input id="falloff" type="number" min="0" max="60" value="6"> f</label>
     </div>
+    <h2>Cara <span id="faceWho" style="text-transform:none;letter-spacing:0"></span></h2>
+    <div class="row" style="align-items:flex-start"><canvas id="faceCv" width="110" height="120"></canvas><div id="faceBars" style="flex:1;font-size:11px"></div></div>
     <h2>Keyframes editados</h2>
     <div id="edits"></div>
     <div class="row">
@@ -241,6 +243,34 @@ function draw2d(res) {
   });
 }
 
+// ------------------------------------------------------------------ face panel
+function drawFace(res) {
+  const pi = selected ? selected.pi : data.people.findIndex(p => p.face);
+  const cv = $("faceCv"), g = cv.getContext("2d"), W = cv.width, H = cv.height;
+  g.clearRect(0, 0, W, H);
+  const p = data.people[pi], r = res[pi];
+  if (!p || !p.face) { $("faceWho").textContent = ""; $("faceBars").innerHTML = '<span style="color:var(--dim)">Sin captura de cara (v2m face …)</span>'; return; }
+  $("faceWho").innerHTML = `· <span style="color:${p.color}">${p.name}</span>`;
+  if (!r) { $("faceBars").textContent = "fuera de su tramo"; return; }
+  const c = p.face.curves[r.f], ok = p.face.valid[r.f], v = n => c[p.face.names.indexOf(n)] || 0;
+  g.globalAlpha = ok ? 1 : .35;
+  g.strokeStyle = "#e8e8e6"; g.lineWidth = 2; g.lineCap = "round";
+  g.beginPath(); g.ellipse(W / 2, H / 2, 46, 56, 0, 0, 7); g.stroke();
+  for (const [side, x] of [["Left", 37], ["Right", 73]]) {
+    const open = Math.max(0.05, 1 - v("eyeBlink" + side)) * (1 + 0.6 * v("eyeWide" + side));
+    g.beginPath(); g.ellipse(x, 48, 8, 5 * open, 0, 0, 7); g.stroke();
+    const by = 35 - 10 * (v("browInnerUp") + v("browOuterUp" + side)) / 2 + 6 * v("browDown" + side);
+    g.beginPath(); g.moveTo(x - 10, by + 2 * v("browInnerUp") * (side === "Left" ? 1 : -1)); g.lineTo(x + 10, by - 2 * v("browInnerUp") * (side === "Left" ? 1 : -1)); g.stroke();
+  }
+  const mw = 16 * (1 + 0.5 * (v("mouthSmileLeft") + v("mouthSmileRight")) / 2 + 0.4 * (v("mouthStretchLeft") + v("mouthStretchRight")) / 2 - 0.5 * v("mouthPucker"));
+  const mo = 2 + 22 * v("jawOpen"), lift = 7 * ((v("mouthSmileLeft") + v("mouthSmileRight")) / 2 - (v("mouthFrownLeft") + v("mouthFrownRight")) / 2);
+  g.beginPath(); g.moveTo(W / 2 - mw, 84 - lift); g.quadraticCurveTo(W / 2, 84 + mo, W / 2 + mw, 84 - lift); g.quadraticCurveTo(W / 2, 84 - mo * 0.3, W / 2 - mw, 84 - lift); g.stroke();
+  g.globalAlpha = 1;
+  const top = p.face.names.map((n, i) => [n, c[i]]).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  $("faceBars").innerHTML = (ok ? "" : '<div style="color:#ff9b6b">sin cara detectada en este fotograma</div>') +
+    top.map(([n, x]) => `<div>${n}<div style="height:4px;background:#2a2e34;border-radius:2px"><div style="width:${(x * 100).toFixed(0)}%;height:4px;background:${p.color};border-radius:2px"></div></div></div>`).join("");
+}
+
 // ------------------------------------------------------------------ editing
 const frameNow = () => Math.min(data.frames - 1, Math.floor(video.currentTime * data.fps + 1e-3));
 let dragBase = null;
@@ -375,7 +405,7 @@ video.onloadedmetadata = () => { resize(); refreshEdits(); };
   if (f !== cache.f || dragging) { cache = { f, res: solveAll(f) }; }
   $("seek").value = f;
   $("info").textContent = `fotograma ${f} / ${data.frames - 1} · ${video.currentTime.toFixed(2)} s`;
-  draw3d(f, cache.res); draw2d(cache.res);
+  draw3d(f, cache.res); draw2d(cache.res); drawFace(cache.res);
   orbit.update(); renderer.render(scene, camera);
   requestAnimationFrame(loop);
 })();

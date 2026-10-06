@@ -109,7 +109,24 @@ gizmo (`R`); the hips can also be moved (`T`). Each change becomes a keyframe th
 ✕ to delete) and marked on the timeline; `Ctrl+Z` undoes. **Guardar** writes, per person,
 `edits.json` (the same edit format as `v2m edit`) plus `edited.npz` and `edited.bvh`.
 
-### 4. Fix and export
+### 4. Face (expressions)
+Faces come from MediaPipe Face Landmarker (Apache-2.0): 52 ARKit-style curves per frame (brows, eyes,
+blinks, jaw, lips, cheeks…) plus head rotation. CPU only.
+
+**Recommended: a separate face take** (phone in front of your face, face filling the frame, even
+light, sound on, **clap at the start** of both the body and the face take):
+```bash
+v2m face capture face_take.mp4 --out runs/my_clip/face_take.npz
+v2m face attach runs/my_clip --person 0 --take runs/my_clip/face_take.npz          # syncs by clap/audio
+v2m face attach runs/my_clip --person 0 --take ... --offset 1.25 --time-scale 1.0  # or set it by hand
+```
+The body keeps the head's overall orientation; the face take adds the expression curves and the
+small head motion on top. **From the body video itself** (head crops, only when faces are visible
+enough): `v2m face from-body runs/my_clip --person 0`.
+Each person gets `face.npz` and `face_curves.csv` (frame × 52 curves); the viewer shows a live face
+panel for the selected person.
+
+### 5. Fix and export
 ```bash
 v2m edit   runs/my_clip/track_00/clean.npz edits.json --out fixed.npz   # see docs/REVIEW_LOOP.md
 v2m export fixed.npz --bvh fixed.bvh --fbx fixed.fbx

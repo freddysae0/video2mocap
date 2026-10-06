@@ -4,6 +4,10 @@
 Multi-person, world-grounded, foot-locked, and reviewable by a human *or an AI agent* that can look at
 key frames and correct the motion with precise, declarative edits.
 
+Built first for **cinematics**: scenes with one or several characters interacting (a hug, a
+goodbye, carrying someone, a conversation), recorded with a phone and turned into animation that
+keeps the timing and intent of the performance.
+
 > Status: **early (v0.1)**. The post-processing core, BVH/FBX export and the review/edit loop are
 > implemented and tested. The first estimator backend (NVIDIA GEM-X) is being integrated.
 

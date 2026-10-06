@@ -5,6 +5,7 @@
   v2m review   MOTION.npz --out SHEET.png [--track-dir DIR]      key-frame contact sheet for review
   v2m edit     MOTION.npz EDITS.json --out EDITED.npz            apply reviewer edits (then re-run post)
   v2m export   MOTION.npz --bvh OUT.bvh [--fbx OUT.fbx]          BVH (and FBX through Blender)
+  v2m view     RUN_DIR                                         web viewer: video + one stick figure per person + 3D
   v2m metrics  MOTION.npz                                        quality numbers as JSON
 """
 from __future__ import annotations
@@ -70,6 +71,12 @@ def cmd_export(a) -> None:
         print(f"wrote {a.fbx}")
 
 
+def cmd_view(a) -> None:
+    from .viewer.export import serve
+
+    serve(a.run_dir, port=a.port, open_browser=not a.no_browser)
+
+
 def cmd_metrics(a) -> None:
     print(json.dumps(report(Motion.load(a.motion)), indent=2))
 
@@ -122,6 +129,12 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--fbx")
     s.add_argument("--blender", help="path to blender executable (auto-detected if omitted)")
     s.set_defaults(fn=cmd_export)
+
+    s = sub.add_parser("view", help="open the web viewer for a run folder")
+    s.add_argument("run_dir")
+    s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--no-browser", action="store_true")
+    s.set_defaults(fn=cmd_view)
 
     s = sub.add_parser("metrics")
     s.add_argument("motion")

@@ -64,6 +64,26 @@ def apply_rigid(m: Motion, M: np.ndarray, b: np.ndarray) -> Motion:
     return out
 
 
+def camera_for(motion: Motion, cam: Camera) -> Camera:
+    """Camera for a motion that went through rigid shifts after estimation (ground placement):
+    x_cam = R (x - shift) + t  ->  t' = t - R shift."""
+    shift = np.zeros(3)
+    for h in motion.meta.get("history", []):
+        if h.get("op") == "place_on_ground":
+            shift += np.asarray(h["shift"], float)
+    return Camera(cam.K, cam.R, cam.t - np.einsum("tij,j->ti", cam.R, shift))
+
+
+def reprojection_px(motion: Motion, cam: Camera, kp2d: np.ndarray, conf_thr: float = 0.5) -> float:
+    """Mean 2D error (px) between the motion's joints and the detected keypoints (same SOMA-77 order)."""
+    gpos, _ = motion.fk()
+    if kp2d.shape[1] != gpos.shape[1]:
+        return float("nan")
+    uv, z = cam.project(gpos)
+    ok = (kp2d[..., 2] > conf_thr) & (z > 0)
+    return float(np.linalg.norm(uv - kp2d[..., :2], axis=-1)[ok].mean()) if ok.any() else float("nan")
+
+
 def run_video(video: str, out: str, static_cam: bool = True, max_people: int = 8, backend: str = "gemx",
               extra: list[str] | None = None, fbx: bool = False) -> dict:
     if backend != "gemx":
@@ -95,8 +115,12 @@ def run_video(video: str, out: str, static_cam: bool = True, max_people: int = 8
             from .blender import bvh_to_fbx
 
             bvh_to_fbx(str(tdir / "clean.bvh"), str(tdir / "clean.fbx"), fps=clean.fps)
-        # review sheet in the track's own world (camera matches the raw world)
+        # review sheet + reprojection in the track's own world (the camera belongs to that world)
         review_m, _ = postprocess(raw, rig)
+        review_cam = camera_for(review_m, cam)
+        metrics["raw"]["reproj_px"] = reprojection_px(raw, cam, kp)
+        metrics["final"]["reproj_px"] = reprojection_px(review_m, review_cam, kp)
+        (tdir / "metrics.json").write_text(json.dumps(metrics, indent=2))
         frames = select_keyframes(review_m, max_frames=12)
         try:
             from .review_io import read_frames
@@ -105,11 +129,11 @@ def run_video(video: str, out: str, static_cam: bool = True, max_people: int = 8
         except Exception as e:  # video reading is optional
             print(f"[v2m] review without video frames: {e}")
             vf = None
-        render_contact_sheet(review_m, frames, tdir / "review.png", vf, cam, kp,
+        render_contact_sheet(review_m, frames, tdir / "review.png", vf, review_cam, kp,
                              title=f"{video_p.name} {tr['dir']} (src f{tr['start']}-{tr['end']})")
         summary["tracks"].append({"dir": tr["dir"], "start": tr["start"], "end": tr["end"],
                                   "final": metrics["final"], "raw": metrics["raw"]})
-        print(f"[v2m] {tr['dir']}: skate {metrics['raw']['foot_skate_cm_s_mean']:.1f} -> "
+        print(f"[v2m] {tr['dir']}: reproj {metrics['raw']['reproj_px']:.1f} -> {metrics['final']['reproj_px']:.1f} px, skate {metrics['raw']['foot_skate_cm_s_mean']:.1f} -> "
               f"{metrics['final']['foot_skate_cm_s_mean']:.2f} cm/s, jitter {metrics['raw']['jitter_m_s3']:.1f} -> "
               f"{metrics['final']['jitter_m_s3']:.1f}")
     (out_p / "summary.json").write_text(json.dumps(summary, indent=2))

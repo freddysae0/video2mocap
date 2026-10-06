@@ -104,5 +104,7 @@ def place_on_ground(motion: Motion, contact_joints: list[str], contacts: dict[st
         return out, 0.0
     level = float(np.median(np.concatenate(hs)))
     out.root_pos[:, up_axis] -= level - sole_offset
-    out.meta.setdefault("history", []).append({"op": "place_on_ground", "shift": -(level - sole_offset)})
+    shift = [0.0, 0.0, 0.0]
+    shift[up_axis] = -(level - sole_offset)
+    out.meta.setdefault("history", []).append({"op": "place_on_ground", "shift": shift})
     return out, 0.0

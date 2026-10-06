@@ -17,7 +17,9 @@ GEM-X's scripts/demo/retarget_utils.py (Apache-2.0) but avoids its soma-retarget
 from __future__ import annotations
 
 import argparse
+import gc
 import json
+import os
 import subprocess
 import sys
 from collections import defaultdict
@@ -33,6 +35,32 @@ sys.path.insert(0, str(GEMX))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # video2mocap (pure numpy parts)
 
 from video2mocap.tracking import stitch_tracks  # noqa: E402
+
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+
+def _limit_sam3db_batch() -> None:
+    """GEM-X extracts SAM-3D-Body (ViT-H) features 16 crops at a time, which does not fit in 8 GB of
+    VRAM next to the other models. Results do not depend on the batch size, only speed does."""
+    from gem.utils.sam3db_extractor import SAM3DBExtractor
+
+    batch = int(os.environ.get("V2M_SAM_BATCH", "4"))
+    original = SAM3DBExtractor.extract_video_features
+    if getattr(original, "_v2m_patched", False):
+        return
+
+    def patched(self, *args, **kwargs):
+        kwargs["batch_size"] = min(kwargs.get("batch_size", batch), batch)
+        return original(self, *args, **kwargs)
+
+    patched._v2m_patched = True
+    SAM3DBExtractor.extract_video_features = patched
+
+
+def _free_gpu() -> None:
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 SOMA_BVH = GEMX / "third_party/soma-retargeter/soma_retargeter/configs/soma/soma_zero_frame0.bvh"
 
@@ -55,7 +83,8 @@ def track_all(video: str, min_frames: int, max_people: int) -> tuple[dict[int, d
         boxes, scores = det.detect(frames[i][..., ::-1].copy())
         for box, tid, _score in tracker.update(boxes, scores):
             seen[int(tid)][i] = np.asarray(box, dtype=np.float32)
-    del frames
+    del frames, det, tracker
+    _free_gpu()
 
     seen = stitch_tracks(seen, max_gap=int(round(3 * fps)))
     tracks = {}
@@ -90,6 +119,8 @@ def run_gemx_on_track(clip: Path, out_dir: Path, bbx_xyxy: np.ndarray, static_ca
 
     from scripts.demo import demo_soma_onnx as demo
 
+    _limit_sam3db_batch()
+    _free_gpu()
     args = SimpleNamespace(video=str(clip), output_root=str(out_dir), static_cam=static_cam, verbose=False,
                            ckpt=None, exp="gem_soma_regression", force_pytorch=False, retarget=False,
                            no_imgfeat=no_imgfeat, ddim=ddim)
@@ -248,6 +279,8 @@ def main() -> None:
         summary["tracks"].append({"dir": tdir.name, "track_id": int(tid), "start": int(tr["start"]),
                                   "end": int(tr["end"]), "coverage": tr["coverage"]})
         print(f"[v2m] track {n} done -> {tdir / 'motion_raw.npz'}")
+        del res, pred
+        _free_gpu()
     (out / "run.json").write_text(json.dumps(summary, indent=2))
 
 

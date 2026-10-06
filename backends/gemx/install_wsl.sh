@@ -68,6 +68,10 @@ source .venv/bin/activate
 uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 uv pip install -e third_party/soma
 (cd third_party/soma && git lfs pull)
+# Without inputs/soma_assets, SOMA downloads the LATEST assets from HuggingFace (nvidia/soma-x@main),
+# whose format can be newer than the SOMA code pinned by GEM-X ("joint_parent_ids is not a file in the
+# archive"). Use the assets that ship with the pinned submodule instead.
+mkdir -p inputs && ln -sfn "$PWD/third_party/soma/assets" inputs/soma_assets
 uv pip install -e .
 uv pip install cloudpickle fvcore iopath pycocotools braceexpand roma 'setuptools<75'
 # onnxruntime-gpu >= 1.24 targets CUDA 13; 1.23.x matches the cu126 torch wheels (cuBLAS 12, cuDNN 9)

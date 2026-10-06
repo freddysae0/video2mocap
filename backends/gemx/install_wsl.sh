@@ -48,8 +48,18 @@ if [ ! -d "$INSTALL_DIR/.git" ]; then
   git clone --recursive https://github.com/NVlabs/GEM-X.git "$INSTALL_DIR"
 fi
 cd "$INSTALL_DIR"
-git fetch --all -q && git checkout -q "$GEMX_REF" && git submodule update --init --recursive
+git fetch --all -q && git checkout -q "$GEMX_REF"
+# --force: an interrupted clone can leave a submodule folder with only its .git file
+git submodule update --init --recursive --force
+[ -d third_party/sam-3d-body/sam_3d_body ] || { echo "[v2m] ERROR: sam-3d-body submodule is empty"; exit 1; }
 git rev-parse HEAD > .v2m_commit
+
+echo "[v2m] user-space system libraries (libusb for open3d, OSMesa for offscreen rendering)"
+SYSLIBS="$HOME/v2m/syslibs"
+if [ ! -f "$SYSLIBS/root/usr/lib/x86_64-linux-gnu/libusb-1.0.so.0" ]; then
+  mkdir -p "$SYSLIBS/debs" && (cd "$SYSLIBS/debs" && apt-get download libusb-1.0-0 libosmesa6 libllvm19 libglapi-mesa)
+  for d in "$SYSLIBS"/debs/*.deb; do dpkg -x "$d" "$SYSLIBS/root"; done
+fi
 
 echo "[v2m] python env"
 [ -d .venv ] || uv venv .venv --python 3.12
@@ -60,7 +70,8 @@ uv pip install -e third_party/soma
 (cd third_party/soma && git lfs pull)
 uv pip install -e .
 uv pip install cloudpickle fvcore iopath pycocotools braceexpand roma 'setuptools<75'
-uv pip install onnxruntime-gpu
+# onnxruntime-gpu >= 1.24 targets CUDA 13; 1.23.x matches the cu126 torch wheels (cuBLAS 12, cuDNN 9)
+uv pip install "onnxruntime-gpu==1.23.2"
 # `pip install -e .` may pull a newer torch from PyPI that no longer matches torchvision
 # ("operator torchvision::nms does not exist"): pin the pair GEM-X's requirements.txt was built with.
 uv pip install --reinstall "torch==2.10.0" "torchvision==0.25.0" --index-url https://download.pytorch.org/whl/cu126

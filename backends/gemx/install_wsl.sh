@@ -61,6 +61,9 @@ uv pip install -e third_party/soma
 uv pip install -e .
 uv pip install cloudpickle fvcore iopath pycocotools braceexpand roma 'setuptools<75'
 uv pip install onnxruntime-gpu
+# `pip install -e .` may pull a newer torch from PyPI that no longer matches torchvision
+# ("operator torchvision::nms does not exist"): pin the pair GEM-X's requirements.txt was built with.
+uv pip install --reinstall "torch==2.10.0" "torchvision==0.25.0" --index-url https://download.pytorch.org/whl/cu126
 
 python - <<'EOF'
 import torch, onnxruntime as ort

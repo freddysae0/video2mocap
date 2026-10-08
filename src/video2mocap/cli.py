@@ -7,6 +7,7 @@
   v2m export   MOTION.npz --bvh OUT.bvh [--fbx OUT.fbx]          BVH (and FBX through Blender)
   v2m view     RUN_DIR                                         web viewer: video + one stick figure per person + 3D
   v2m face     capture | from-body | sync | attach             face curves (ARKit-52) and merging with a body
+  v2m scan     PHOTOS|VIDEO --out DIR                          photogrammetry: textured 3D mesh
   v2m metrics  MOTION.npz                                        quality numbers as JSON
 """
 from __future__ import annotations
@@ -111,6 +112,14 @@ def cmd_face(a) -> None:
         print(attach_face(a.run_dir, a.person, a.take, offset_s=offset, time_scale=a.time_scale))
 
 
+def cmd_scan(a) -> None:
+    from .scan.pipeline import ScanConfig, scan
+
+    cfg = ScanConfig(max_images=a.max_images, resolution_level=a.resolution_level, decimate=a.decimate,
+                     refine=not a.no_refine, matcher=a.matcher)
+    print(json.dumps(scan(a.source, a.out, cfg), indent=2))
+
+
 def cmd_metrics(a) -> None:
     print(json.dumps(report(Motion.load(a.motion)), indent=2))
 
@@ -190,6 +199,16 @@ def main(argv: list[str] | None = None) -> None:
     f.add_argument("--sync", default="auto", choices=["auto", "clap", "audio"])
     f.add_argument("--time-scale", type=float, default=1.0)
     s.set_defaults(fn=cmd_face)
+
+    s = sub.add_parser("scan", help="photos or video -> textured 3D mesh (COLMAP + OpenMVS)")
+    s.add_argument("source", help="folder of photos or a video file")
+    s.add_argument("--out", required=True)
+    s.add_argument("--max-images", type=int, default=300)
+    s.add_argument("--resolution-level", type=int, default=1, help="0 full, 1 half (8 GB GPU), 2 quarter")
+    s.add_argument("--decimate", type=float, default=1.0)
+    s.add_argument("--no-refine", action="store_true")
+    s.add_argument("--matcher", default="exhaustive", choices=["exhaustive", "sequential"])
+    s.set_defaults(fn=cmd_scan)
 
     s = sub.add_parser("metrics")
     s.add_argument("motion")

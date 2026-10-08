@@ -4,6 +4,11 @@
 Multi-person, world-grounded, foot-locked, and reviewable by a human *or an AI agent* that can look at
 key frames and correct the motion with precise, declarative edits.
 
+<p align="center">
+  <img src="docs/media/viewer-walk.gif" alt="Solved walk cycle in the video2mocap web viewer" width="520"><br>
+  <sub>A walk solved from a single video, played back in the built-in web viewer (<code>v2m view</code>). Green = foot in contact with the ground.</sub>
+</p>
+
 Built first for **cinematics**: scenes with one or several characters interacting (a hug, a
 goodbye, carrying someone, a conversation), recorded with a phone and turned into animation that
 keeps the timing and intent of the performance.

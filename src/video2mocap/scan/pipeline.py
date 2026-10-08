@@ -126,6 +126,7 @@ class ScanConfig:
     decimate: float = 1.0  # OpenMVS mesh decimation factor (1 = keep)
     refine: bool = True
     texture_size: int = 8192
+    clean: bool = False  # remove people + plates with Codex (one call per photo), see scan/clean.py
     extra: dict = field(default_factory=dict)
 
 
@@ -140,12 +141,28 @@ def scan(src: str | Path, out: str | Path, cfg: ScanConfig | None = None) -> dic
 
     if not images.exists() or not any(images.iterdir()):
         report["stages"]["ingest"] = ingest(src, images, cfg.max_images, cfg.max_side)
+    mask_args: list = []
+    if cfg.clean:
+        from .clean import clean_folder
+
+        report["stages"]["clean"] = {"edited": sum(1 for v in clean_folder(images, out).values()
+                                                   if v.get("edited_area", 0) > 0)}
+        # COLMAP ignores features where its mask is black: invert our "edited region" masks so no
+        # geometry is ever derived from invented pixels (the real background comes from other photos)
+        from PIL import Image, ImageOps
+
+        cm = out / "colmap_masks"
+        cm.mkdir(exist_ok=True)
+        for mpath in (out / "masks").glob("*.png"):
+            ImageOps.invert(Image.open(mpath).convert("L")).save(cm / f"{mpath.stem}.jpg.png")
+        images = out / "images_clean"
+        mask_args = ["--ImageReader.mask_path", cm]
     colmap = tool("colmap")
     db = out / "database.db"
     if not (sparse / "0").exists():
         sparse.mkdir(exist_ok=True)
         run([colmap, "feature_extractor", "--database_path", db, "--image_path", images,
-             "--ImageReader.single_camera", "1", "--ImageReader.camera_model", "OPENCV"], log)
+             "--ImageReader.single_camera", "1", "--ImageReader.camera_model", "OPENCV", *mask_args], log)
         run([colmap, f"{cfg.matcher}_matcher", "--database_path", db], log)
         run([colmap, "mapper", "--database_path", db, "--image_path", images, "--output_path", sparse], log)
     aligned = out / "sparse_aligned"

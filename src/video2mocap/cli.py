@@ -116,7 +116,7 @@ def cmd_scan(a) -> None:
     from .scan.pipeline import ScanConfig, scan
 
     cfg = ScanConfig(max_images=a.max_images, resolution_level=a.resolution_level, decimate=a.decimate,
-                     refine=not a.no_refine, matcher=a.matcher)
+                     refine=not a.no_refine, matcher=a.matcher, clean=a.clean)
     print(json.dumps(scan(a.source, a.out, cfg), indent=2))
 
 
@@ -208,6 +208,7 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--decimate", type=float, default=1.0)
     s.add_argument("--no-refine", action="store_true")
     s.add_argument("--matcher", default="exhaustive", choices=["exhaustive", "sequential"])
+    s.add_argument("--clean", action="store_true", help="remove people and licence plates with Codex first")
     s.set_defaults(fn=cmd_scan)
 
     s = sub.add_parser("metrics")

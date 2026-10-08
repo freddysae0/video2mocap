@@ -42,13 +42,14 @@ def codex_edit(image: Path, out: Path, timeout_s: int = 600) -> str:
     if not exe:
         raise FileNotFoundError("codex CLI not found on PATH")
     cmd = [exe, "exec", "--skip-git-repo-check", "-s", "workspace-write", "-C", str(out.parent),
-           "-i", str(image), "--output-last-message", str(last), PROMPT.format(out=out.as_posix())]
-    # stdin MUST be closed: `codex exec` reads stdin when it is not a terminal and would wait forever
+           "-i", str(image), "--output-last-message", str(last), "-"]
+    # The prompt goes through stdin ("-"): on Windows the npm .cmd shim truncates multi-line arguments,
+    # and `codex exec` waits forever on an open stdin that never closes.
     t_start = time.time()
-    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, encoding="utf-8", errors="ignore")
     try:
-        proc.communicate(timeout=timeout_s)
+        proc.communicate(input=PROMPT.format(out=out.as_posix()), timeout=timeout_s)
     except subprocess.TimeoutExpired:
         # on Windows codex is a .cmd -> node -> codex.exe chain: kill the whole tree
         subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)

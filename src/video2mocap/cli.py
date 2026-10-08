@@ -120,6 +120,23 @@ def cmd_scan(a) -> None:
     print(json.dumps(scan(a.source, a.out, cfg), indent=2))
 
 
+def cmd_catastro(a) -> None:
+    from .scan.catastro import area_polygon_utm, fetch_photos, parcels_in
+
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    plist = out / "parcels.json"
+    if plist.exists():
+        parcels = json.loads(plist.read_text(encoding="utf-8"))
+    else:
+        parcels = parcels_in(area_polygon_utm(a.geojson, a.name), delay_s=a.delay)
+        plist.write_text(json.dumps(parcels, indent=1), encoding="utf-8")
+    print(f"[catastro] {len(parcels)} parcels in {a.name}")
+    if not a.list_only:
+        idx = fetch_photos(parcels, out / "photos", delay_s=a.delay)
+        print(json.dumps({s: sum(1 for v in idx.values() if v["status"] == s) for s in ("ok", "no_photo", "error")}))
+
+
 def cmd_metrics(a) -> None:
     print(json.dumps(report(Motion.load(a.motion)), indent=2))
 
@@ -210,6 +227,14 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--matcher", default="exhaustive", choices=["exhaustive", "sequential"])
     s.add_argument("--clean", action="store_true", help="remove people and licence plates with Codex first")
     s.set_defaults(fn=cmd_scan)
+
+    s = sub.add_parser("catastro", help="download Spanish Cadastre facade photos for an area (keep them private)")
+    s.add_argument("--geojson", required=True, help="GeoJSON (WGS84) with the area polygon")
+    s.add_argument("--name", required=True, help='feature name, e.g. "el Raval"')
+    s.add_argument("--out", required=True)
+    s.add_argument("--delay", type=float, default=1.0, help="seconds between requests (be polite)")
+    s.add_argument("--list-only", action="store_true")
+    s.set_defaults(fn=cmd_catastro)
 
     s = sub.add_parser("metrics")
     s.add_argument("motion")
